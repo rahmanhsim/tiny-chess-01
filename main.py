@@ -1,80 +1,2 @@
-# tiny-chess-01 starter (MIT, see LICENSE): a working entry to start from.
-# It plays every game of the gauntlet through the env at MAKEFUN_ENV_URL:
-# POST /game {} serves the game in play, POST /move {game, move} plays a
-# move, and the loop ends when the env answers status "done".
-#
-# Its chess is one line deep: of the legal moves the env lists, it plays the
-# one that captures the most valuable piece, read from the FEN. Ties go, in
-# order, to the better promotion, the cheaper moving piece, then the first
-# move in UCI order. No clock and no random: the same position always gets
-# the same move, so the trial's replay matches.
-#
-# Make it stronger with a real search under a fixed node or depth budget,
-# never a clock. The rule: this file is the whole engine, at most 4,096
-# bytes as committed, Python 3.13 standard library only.
-
-import json
-import os
-import sys
-import urllib.error
-import urllib.request
-
-ENV_URL = os.environ.get("MAKEFUN_ENV_URL") or sys.exit("MAKEFUN_ENV_URL is not set")
-
-# Piece values by FEN letter, case-insensitive. The king is never captured;
-# its 100 only ranks it last as the moving piece.
-VALUE = {"p": 1, "n": 3, "b": 3, "r": 5, "q": 9, "k": 100}
-
-
-def post(path, body):
-    """POST a JSON body to the env and return its JSON answer."""
-    req = urllib.request.Request(
-        ENV_URL + path,
-        data=json.dumps(body).encode(),
-        headers={"content-type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req) as res:
-            return json.load(res)
-    except urllib.error.HTTPError as e:
-        sys.exit(f"{path}: HTTP {e.code} {e.read().decode(errors='replace')}")
-
-
-def board_of(fen):
-    """The FEN's pieces as {square: letter}, e.g. {"e1": "K", "e8": "k"}."""
-    board = {}
-    for i, row in enumerate(fen.split()[0].split("/")):
-        file = 0
-        for c in row:
-            if c.isdigit():
-                file += int(c)
-            else:
-                board["abcdefgh"[file] + str(8 - i)] = c
-                file += 1
-    return board
-
-
-def choose(fen, legal):
-    """The legal UCI move that takes the most, with the fixed tie-break."""
-    board = board_of(fen)
-
-    def rank(move):
-        mover = board[move[:2]].lower()
-        victim = board.get(move[2:4])
-        if victim is None and mover == "p" and move[0] != move[2]:
-            victim = "p"  # en passant: the pawn taken is beside the target
-        taken = VALUE[victim.lower()] if victim else 0
-        promo = VALUE[move[4]] if len(move) == 5 else 0
-        return (-taken, -promo, VALUE[mover], move)
-
-    return min(legal, key=rank)
-
-
-while True:
-    g = post("/game", {})
-    if g["status"] == "done":
-        break
-    while g["status"] == "your_move":
-        g = post("/move", {"game": g["game"], "move": choose(g["fen"], g["legal_moves"])})
-    print(f"game {g['game']}: {g['outcome']} by {g['reason']}", file=sys.stderr)
-print(f"done: {g.get('wins')} won, {g.get('draws')} drawn, {g.get('losses')} lost", file=sys.stderr)
+#coding:l1
+import lzma;exec(lzma.decompress('\x000\0\x008#\0\0\0\0\0\0\x004œ%Å¯^´Ìû•2i%]ÆŞæéSCk1ºH#ˆç´r…åÿ<iÔZú¸!“œ[køš…/“’ÉT¾1u!“×¶~ ÿúŞ£€a)\'‰!Î:Ñvİæ1æt°6¯~3Ï{(2ö3Û’vİŠS¡p3ñÒÑV]¸6-jtÓûZæò¯ÃGÄLŸPÂ1¬7ŞÇ!fÓcg²˜„"œ±¦ïC¿>œ«c÷ÀŸ#¾‰Q7M,¿ím‹òø|û\0#®n`å&ƒõ£œL®ÿ¯|`é(Œ`D9÷ğ-P%Ç8%3`0n©Eİ½XÁÁÀ \\M~\0ë€Î86F«ì™Ûr¥Gî€ü”ù¿ÃwOGh{·k>êE²%În„†C¬%öJzòeiÛqCëÇÊ˜=nH”XßÒœ…åÕöØú®œÒÈihª«ümMJ:¹—*‘ñuÕ­’ÂÜh8ÅPMÀ†	ºÂaÙ¬Ô!\\Zå‹ëşHã*a¡Í:6PÜü!vvµ\\É?âw`°¼q½nt—e¡!ùrï®¤ƒ“\'ÁÎÁ"XA‹qGÚ±şGqî&8˜ØÎ\rWìÛdá+$×k#ÀµúÑrñâ7oô$[ã4rØô=g"Í\0I²‡®a[R@<ÈaümĞùë\'ŒŒ…æşä+óÆ¥Öï¨uÃå¸9~€Î5MÂ¼Ù"*Àê¥œ]H¬Î…È‡ïiPi¬ãÚvÛıâa¤;9½0}(aÊA=‚A`#=X’‡«x<öÿQ_§’­KYÅ2<ãéX´Óg¨£+afşHTe\nÚZÊ¹[´!ÉW9{	a†[Òe|P"…ù„ö_œí†$àÄx]\0lÇã³Ş‘]Ì—Õ”SË,Zr¦¿„âPî‡‡L{ë©×åÌÖŸ±Ğí]Şr+Ë‚W•	ÚcÛIg/½òŞÆxÔBûtâà»^i¤cæøğ3¿-øAá/M#i¹uºs\'tV·¶òüU½nR‰.`•—ı“.\ry³GË1¾\\FIÃ4(­Ğ?¬X–Œ™¯µô¥c˜HÍ¥‡³$4t\\(+¹`ûn[[\'Ü>T¹ìÃñ¹"*ÚÎ­‚’ÇGÊUÉ·„`é™.Rr–ëâá¾ÈŒ’w{ú\nV]È@}(³U‹‘ºëBñ(X× )Ã¸„iÄL	L¶1rD|l×ƒd(Ïå*ót<+KZòéÇ©²ÄBü0JÁ–ØšHr\0i0g«	î àL“œ\r"óLi‰Á}>R$<°©ø¬=”¬=+*k´.<;$"F¼Ôì´Tú\\±MNÙoä2¦õPüÛ…­›şE\0$n,+ë\rz ÿ5¹5“¶NL®‰ÜGèúfàô¼¢“ÖÈ(ë5ÛD›ÎÛŒ$w¨ŸSUpSÆDÒ)‡Ïv¢HÂµ€}…\ry	m–e£ÍÈO-Ü˜aÛ§éYÌäl\nª9\r%ÀØ­‘ò’ëÖZ¼şÓF0ä³› ‹D¹ôİ/n°gìYìóRaZRşV@:–Cµa/—¡¯»^«íTğ@P°DJ/Bl‹ŸúÆfƒ»æOŠº5¢a^a·ñUá/ÙAï’¤U£ãÛ~¬øıÆ/WU«ƒÙ¦¿^öÏyJFİÇçW£ÎcÂÙDÛ²¬î1ÕË~oÂî§ÿ5ïw’©Ö!CóÜÔİbBiï†ÔH\0ƒ¤}WäW"`ŒuÜS™Ã=ĞÍíUQ]aZÂÇ‘0xö·;Â`µİ‚r—"Ğs-#>¬ i+™õ¿Î®àzÄ‹ç l:’–¯±†h¡ô§^İŒØAë4RÈ}ëƒ¨Ğ_Ü·Gi{Ï¸8m¢ëü\ry½‰­nğX¬P—Åh…î®†ì„K™A2îŸ´g±Í°Ãø‘\r¡Ç˜¿•Õ¦}&Xp>‘4¬ì=ûõÔ…pâÖÀÛJ´pfáj¿¡ØÌ|àÁ	uÙaP0èÔŠœÃÓÕA‹ïZPîùT7Ş¸ğ‚ÂJëı‚g—yP:C[EC˜ÿw~ŞıZâBáïeŞ¤ÃŒ*öXO±ñ\\~¼?ïèP}ÊDe/†i¹%ö•_nvoÿØL8±\n3²FS{HÖå€CrÁ8gâOÔ‘X†vt½ô\r/`š¹\n,Ò\nİc[i|&Ğ`F|0ÙI¶5ZĞ¡„}Ûm›ªÚ„ò–‘åsÂXíT:#‘9à|äÔÿ¸¥ctØq’*Å=UÄ}«Âk>qÆä‚0àWø°ÜK,zHÙ&Ù¸`Šöh´}¥ßºí¸CcÏÁ“Çw«z-êÀB¾§éfóÒ‘»o”\nLğ­Õ.4EzG‡âà.\'R;{ôÑw¹®¨‰ûÈ›Ì†¡g\\ë·½Wp&©Ï#»>m¿jÏ)‰n`V8µ}‘­·˜İ*&­; J~jˆ2t´}&TZ<\0ÄÂÍPK;ú•Ì™6~Bê6b’P9VC9•ğ6ÇÖñé^öèU!å©x\nšt¸ohèºÅïĞ|BŸËµæµ,\'K©H€¹YwW¦ƒÜ–ê£ä°Kƒ\\µè<òFË†f>SI¥õı3`ƒ¨hQÆXĞšùJã‚Á@×h•!Ü‰²ÓÀÃ¿õ0«}×-?Ğ©ƒŒÆâ6÷êgî\n1V@?Yl30‰UYHB4Îè˜k,=×Tİ,!‘g´›SàÏJÛ·\'ºïI}˜¤òMuâôâP¬SÓ²wÔÌ¦&ÇÊø´pDXÜ“åG‡F¡¸ççÿøot¿[ù»{ıf¼/‘“ã’‹f\\å$`_6?÷Ê¯Ù~?ÂFö:’Â•2™õğªi µ]¬Ğ¼½QÀ‚ñêÎ—?ËrUj;ı2§\r¼G"íÑ¬.:i3vç\'H/çºÓ8ÿ5,¦—¦ñ´ÂqsŸN!À\'ñ,ˆµJA¾ÂĞ3á“Å5ÔÑúV…Dp÷2í³ôm_ïeO%ßMÌu•İºø]K”ĞG˜ ;<f&¥<g]¥©£ÛÚÜ0j•d°M@vÂåKš*êCX3‚ã9É”R…a\nídºg|mŠÅh I5É²[Q¤Â‚F#ø<®äì8Ô»×£¨Ç[ğv¤£Æwÿ~SR…ı^NÇÀ$&°ˆ.A‚`ÇæÅWÓkr-ÄMUkQ¡ü“ U·¥ƒ©Ùpp‹êÄ§f=·–T\\Í`ÅÖ½ &«{\nJÙÜn7°}œ‚q÷ÛÙl@¼·â©YË£°Ç¤=].äÊÁ¶|ÜIÓÇIøe1”òËQ±t_ŸjÃIf–ëÎ1¾oMÆ;&I‘û¢PÖH8…qn^`Ç´§R´à£ºŸ¢ZÃep‚¶¯?½¥Éöw•¸ûN{‘C%Ùx‡?İä÷eâM¶rV’à\n3Äô7iZR½Ég¥\rCZ¦‹‹w\'O3åj_LL_e0$‡Ü¶Ê#ñêà`Ó5Jr~^AÁ›ÆğB?‡Pc:’7¸\0£kœyPÚ¡€¥b®,²[}V`Mèª“ÃvW³SÍ©rZØÑæ–-8İ@:ÿ„EÙ.@Ø	sÑ&óš¹(ñşG˜³(Q$È_i¨¡76wFº½A‹1CıjOå%“¨}d†m2às:¾me#|QÆèÃPÊLQ~ïlx`¾6ô\r™Ú0‰Ã¬ËkÆmsİ¯¸\rt	Å0Û6é(‚]¨U™íú{ wR…„ü;]áh:d¦ABùh\\eĞKL«‘ú‰Rfy½W-a[p¸”\0[.ãrcN¨á8„°3\0xSãæÒ†9pìÆ³¥P@"üÓJ¡ İ’6®Ûa@B4Äö¼ú/Éq¼ÚŸ P×ŒUn¢[ì3àv¸&…W[Ú\r¸òkâ›H}ÿp$ ˆÒ!`M´øş`_™1Ï‡ˆ½QVsªtªà§ ·¨0Nô¤ØJÛù‹ô†5³û{˜„<'.encode('l1')))
